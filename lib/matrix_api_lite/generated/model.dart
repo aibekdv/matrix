@@ -3501,9 +3501,11 @@ class ProfileInformation {
 
   ProfileInformation.fromJson(Map<String, Object?> json)
       : avatarUrl = ((v) => v != null
-            ? ((v as String).startsWith('mxc://')
-                ? Uri.parse(v)
-                : throw Exception('Uri not an mxc URI'))
+            // ⚠️ Modified: previously an exception was thrown if avatar_url was not an MXC URI
+            // Now it simply returns null.
+            // Reason: some users may not have an avatar, or the server may return an empty/invalid URL.
+            // This prevents the SDK from crashing when fetching profiles and allows safe operation without avatars.
+            ? ((v as String).startsWith('mxc://') ? Uri.parse(v) : null)
             : null)(json['avatar_url']),
         displayname =
             ((v) => v != null ? v as String : null)(json['displayname']),
