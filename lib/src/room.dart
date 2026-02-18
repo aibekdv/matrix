@@ -364,15 +364,21 @@ class Room {
     }
 
     final mxId = client.directChats.entries
-        .firstWhereOrNull((MapEntry<String, dynamic> e) {
-      final roomIds = e.value;
-      return roomIds is List<dynamic> && roomIds.contains(id);
-    })?.key;
+        .firstWhereOrNull((e) => e.value.contains(id))
+        ?.key;
     if (mxId?.isValidMatrixId == true) return _cachedDirectChatMatrixId = mxId;
     return _cachedDirectChatMatrixId = null;
   }
 
-  /// Wheither this is a direct chat or not
+  /// Whether this is a direct chat or not.
+  ///
+  /// Returns `true` if this room is marked as a direct chat in the user's
+  /// `m.direct` account data. Note that this is a user-level annotation,
+  /// not an inherent property of the room - a room with only 2 members
+  /// is NOT automatically considered a direct chat.
+  ///
+  /// To mark a room as a direct chat, use [addToDirectChat] or set
+  /// `isDirect: true` when creating the room.
   bool get isDirectChat => directChatMatrixID != null;
 
   Event? lastEvent;
@@ -478,13 +484,15 @@ class Room {
     Map<String, BasicEvent>? roomAccountData,
     RoomSummary? summary,
     this.lastEvent,
+    LatestReceiptState? receiptState,
   })  : roomAccountData = roomAccountData ?? <String, BasicEvent>{},
         summary = summary ??
             RoomSummary.fromJson({
               'm.joined_member_count': 0,
               'm.invited_member_count': 0,
               'm.heroes': [],
-            });
+            }),
+        receiptState = receiptState ?? LatestReceiptState.empty();
 
   /// The default count of how much events should be requested when requesting the
   /// history of this room.
@@ -617,10 +625,7 @@ class Room {
     return readAtMilliseconds < lastEvent.originServerTs.millisecondsSinceEpoch;
   }
 
-  LatestReceiptState get receiptState => LatestReceiptState.fromJson(
-        roomAccountData[LatestReceiptState.eventType]?.content ??
-            <String, dynamic>{},
-      );
+  LatestReceiptState receiptState;
 
   /// Returns true if this room is unread. To check if there are new messages
   /// in muted rooms, use [hasNewMessages].
@@ -2768,12 +2773,12 @@ class Room {
       do {
         databaseEvents = await client.database
             .getEventList(this, start: start, limit: limit);
+        start += limit;
+        foundEvents.addAll(databaseEvents.where(searchFunc));
         if (databaseEvents.lastOrNull?.type == EventTypes.RoomCreate) {
           timelineComplete = true;
           break;
         }
-        start += limit;
-        foundEvents.addAll(databaseEvents.where(searchFunc));
       } while (databaseEvents.isNotEmpty);
 
       if (timelineComplete) {
