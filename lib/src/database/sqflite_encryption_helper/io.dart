@@ -7,6 +7,7 @@ import 'package:sqlite3/open.dart';
 
 import 'package:matrix/matrix.dart';
 
+// ignore: unused-code
 /// A helper utility for SQfLite related encryption operations
 ///
 /// * helps loading the required dynamic libraries - even on cursed systems
@@ -214,7 +215,7 @@ class SQfLiteEncryptionHelper {
     if (identical(a, b)) {
       return true;
     }
-    for (int index = 0; index < a.length; index += 1) {
+    for (var index = 0; index < a.length; index += 1) {
       if (a[index] != b[index]) {
         return false;
       }

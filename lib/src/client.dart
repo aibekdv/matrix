@@ -297,7 +297,9 @@ class Client extends MatrixApi {
             accessToken: legacyFormat.accessToken,
             tokenType: 'Bearer',
             refreshToken: legacyFormat.refreshToken,
-            expiresIn: legacyFormat.expiresInMs,
+            expiresIn: legacyFormat.expiresInMs == null
+                ? null
+                : Duration(milliseconds: legacyFormat.expiresInMs!),
             scope: null,
           ),
         ),
@@ -307,10 +309,9 @@ class Client extends MatrixApi {
     };
 
     accessToken = tokenResponse.accessToken;
-    final expiresInMs = tokenResponse.expiresIn;
-    final tokenExpiresAt = expiresInMs == null
-        ? null
-        : DateTime.now().add(Duration(milliseconds: expiresInMs));
+    final expiresIn = tokenResponse.expiresIn;
+    final tokenExpiresAt =
+        expiresIn == null ? null : DateTime.now().add(expiresIn);
     _accessTokenExpiresAt = tokenExpiresAt;
     await database.updateClient(
       homeserverUrl,
@@ -558,10 +559,9 @@ class Client extends MatrixApi {
 
       // Check if server supports at least one supported version
       final versions = await getVersions();
-      if (!versions.versions
-          .any((version) => supportedVersions.contains(version))) {
+      if (!versions.versions.any(supportedVersions.contains)) {
         Logs().w(
-          'Server supports the versions: ${versions.toString()} but this application is only compatible with ${supportedVersions.toString()}.',
+          'Server supports the versions: $versions but this application is only compatible with $supportedVersions.',
         );
         assert(false);
       }
@@ -2248,7 +2248,7 @@ class Client extends MatrixApi {
       _initLock = false;
       onLoginStateChanged.add(LoginState.loggedIn);
       Logs().i(
-        'Successfully connected as ${userID.localpart} with ${homeserver.toString()}',
+        'Successfully connected as ${userID.localpart} with $homeserver',
       );
 
       /// Timeout of 0, so that we don't see a spinner for 30 seconds.
@@ -2371,11 +2371,7 @@ class Client extends MatrixApi {
   Future<void>? _handleSoftLogoutFuture;
 
   Future<void> _handleSoftLogout() async {
-    final onSoftLogout = this.onSoftLogout;
-    if (onSoftLogout == null) {
-      await logout();
-      return;
-    }
+    final onSoftLogout = this.onSoftLogout ?? (_) => refreshAccessToken();
 
     _handleSoftLogoutFuture ??= () async {
       onLoginStateChanged.add(LoginState.softLoggedOut);
@@ -2399,8 +2395,7 @@ class Client extends MatrixApi {
     Duration expiresIn = const Duration(minutes: 1),
   ]) async {
     final tokenExpiresAt = accessTokenExpiresAt;
-    if (onSoftLogout != null &&
-        tokenExpiresAt != null &&
+    if (tokenExpiresAt != null &&
         tokenExpiresAt.difference(DateTime.now()) <= expiresIn) {
       await _handleSoftLogout();
     }
@@ -2435,7 +2430,7 @@ class Client extends MatrixApi {
         since: prevBatch,
         timeout: timeout?.inMilliseconds,
         setPresence: syncPresence,
-      ).then((v) => Future<SyncUpdate?>.value(v)).catchError((e) {
+      ).then(Future<SyncUpdate?>.value).catchError((e) {
         if (e is MatrixException) {
           syncError = e;
         } else {
@@ -2628,15 +2623,15 @@ class Client extends MatrixApi {
   }
 
   Future<void> _handleToDeviceEvents(List<BasicEventWithSender> events) async {
-    final Map<String, List<String>> roomsWithNewKeyToSessionId = {};
-    final List<ToDeviceEvent> callToDeviceEvents = [];
+    final roomsWithNewKeyToSessionId = <String, List<String>>{};
+    final callToDeviceEvents = <ToDeviceEvent>[];
     for (final event in events) {
       var toDeviceEvent = ToDeviceEvent.fromJson(event.toJson());
-      Logs().v('Got to_device event of type ${toDeviceEvent.type}');
+      Logs().v('Got to_device event ${toDeviceEvent.toJson()} ');
       if (encryptionEnabled) {
         if (toDeviceEvent.type == EventTypes.Encrypted) {
           toDeviceEvent = await encryption!.decryptToDeviceEvent(toDeviceEvent);
-          Logs().v('Decrypted type is: ${toDeviceEvent.type}');
+          Logs().v('Decrypted to_device event is: ${toDeviceEvent.toJson()}');
 
           /// collect new keys so that we can find those events in the decryption queue
           if (toDeviceEvent.type == EventTypes.ForwardedRoomKey ||
@@ -2847,7 +2842,7 @@ class Client extends MatrixApi {
   }
 
   Future<void> _handleEphemerals(Room room, List<BasicEvent> events) async {
-    final List<ReceiptEventContent> receipts = [];
+    final receipts = <ReceiptEventContent>[];
 
     for (final event in events) {
       room.setEphemeral(event);
@@ -3227,6 +3222,8 @@ class Client extends MatrixApi {
           return a.membership == Membership.invite ? -1 : 1;
         } else if (a.isFavourite != b.isFavourite) {
           return a.isFavourite ? -1 : 1;
+        } else if (a.isLowPriority != b.isLowPriority) {
+          return a.isLowPriority ? 1 : -1;
         } else if (pinUnreadRooms &&
             a.notificationCount != b.notificationCount) {
           return b.notificationCount.compareTo(a.notificationCount);
@@ -3762,10 +3759,9 @@ class Client extends MatrixApi {
   /// Whether all push notifications are muted using the [.m.rule.master]
   /// rule of the push rules: https://matrix.org/docs/spec/client_server/r0.6.0#m-rule-master
   bool get allPushNotificationsMuted {
-    final Map<String, Object?>? globalPushRules =
-        _accountData[EventTypes.PushRules]
-            ?.content
-            .tryGetMap<String, Object?>('global');
+    final globalPushRules = _accountData[EventTypes.PushRules]
+        ?.content
+        .tryGetMap<String, Object?>('global');
     if (globalPushRules == null) return false;
 
     final globalPushRulesOverride = globalPushRules.tryGetList('override');
@@ -4055,7 +4051,7 @@ class Client extends MatrixApi {
       for (final identityKey in olmSessions.keys) {
         final sessions = olmSessions[identityKey]!;
         for (final sessionId in sessions.keys) {
-          final session = sessions[sessionId]!;
+          final session = sessions[sessionId];
           await database.storeOlmSession(
             identityKey,
             session['session_id'] as String,
@@ -4230,7 +4226,7 @@ class BadServerLoginTypesException implements Exception {
 
   @override
   String toString() =>
-      'Server supports the Login Types: ${serverLoginTypes.toString()} but this application is only compatible with ${supportedLoginTypes.toString()}.';
+      'Server supports the Login Types: $serverLoginTypes but this application is only compatible with $supportedLoginTypes.';
 }
 
 class FileTooBigMatrixException extends MatrixException {

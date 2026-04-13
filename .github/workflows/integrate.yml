@@ -42,7 +42,7 @@ jobs:
       - uses: dart-lang/setup-dart@a57a6c04cf7d4840e88432aad6281d1e125f0d46
         with:
           sdk: ${{ env.dart_version }}
-      - uses: famedly/backend-build-workflows/.github/actions/rust-prepare@v4
+      - uses: famedly/backend-build-workflows/.github/actions/rust-prepare@v5
       - name: Run tests
         run: |
           export HOMESERVER_IMPLEMENTATION=${{matrix.homeserver}}
@@ -69,7 +69,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install --no-install-recommends --no-install-suggests -y lcov libsqlite3-0 libsqlite3-dev
           ./scripts/test.sh
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: coverage_without_olm
@@ -87,13 +87,13 @@ jobs:
         with:
           sdk: ${{ env.dart_version }}
           #architecture: "arm64"
-      - uses: famedly/backend-build-workflows/.github/actions/rust-prepare@v4
+      - uses: famedly/backend-build-workflows/.github/actions/rust-prepare@v5
       - name: Run tests
         run: |
           sudo apt-get update && sudo apt-get install --no-install-recommends --no-install-suggests -y lcov libsqlite3-0 libsqlite3-dev libssl3
           ./scripts/prepare_vodozemac.sh
           ./scripts/test.sh
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: coverage
@@ -107,7 +107,7 @@ jobs:
     needs: [coverage, coverage_without_olm]
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
       - name: Merge lcov files
         run: |
           sudo apt-get -y install lcov
@@ -119,7 +119,7 @@ jobs:
         with:
           token: ${{secrets.CODECOV_TOKEN}}
           files: ./merged.info, ./coverage/lcov.info, ./coverage_without_olm/lcov.info
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: merged
           path: merged/
