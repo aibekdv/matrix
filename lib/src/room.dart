@@ -946,21 +946,25 @@ class Room {
       }
     }
 
-    // Check media config of the server before sending the file. Stop if the
-    // Media config is unreachable or the file is bigger than the given maxsize.
+    // Media config is advisory per spec: it's a size hint, not a gate.
+    // If unreachable (e.g. server returns 403/404 on /v1/media/config),
+    // skip the size check and let the upload itself enforce server limits.
+    // Only fail fast when we positively know the file exceeds the limit.
     try {
       final mediaConfig = await client.getConfig();
       final maxMediaSize = mediaConfig.mUploadSize;
       if (maxMediaSize != null && maxMediaSize < file.bytes.lengthInBytes) {
         throw FileTooBigMatrixException(file.bytes.lengthInBytes, maxMediaSize);
       }
-    } catch (e) {
-      Logs().d('Config error while sending file', e);
+    } on FileTooBigMatrixException {
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first
           .unsigned![messageSendingStatusKey] = EventStatus.error.intValue;
       await _handleFakeSync(syncUpdate);
       rethrow;
+    } catch (e) {
+      Logs().w('Media config unreachable, skipping size check', e);
     }
+
 
     MatrixFile? uploadThumbnail =
         thumbnail; // ignore: omit_local_variable_types
